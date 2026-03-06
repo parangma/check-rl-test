@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chess Tournament Viewer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #1a1a2e; color: #eee; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding: 20px; }
+  .container { display: flex; gap: 24px; max-width: 1100px; width: 100%; flex-wrap: wrap; justify-content: center; }
+
+  /* Board */
+  .board-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .player-bar { display: flex; align-items: center; gap: 10px; font-size: 15px; width: 480px; padding: 8px 12px; border-radius: 8px; background: #16213e; }
+  .player-bar .dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #555; flex-shrink: 0; }
+  .player-bar .dot.white { background: #fff; }
+  .player-bar .dot.black { background: #222; }
+  .player-bar .name { font-weight: 600; flex: 1; }
+  .player-bar .badge { font-size: 12px; padding: 2px 8px; border-radius: 4px; }
+  .badge.win { background: #2ecc71; color: #000; }
+  .badge.lose { background: #e74c3c; }
+  .badge.draw { background: #f39c12; color: #000; }
+
+  #board { display: grid; grid-template-columns: repeat(8, 60px); grid-template-rows: repeat(8, 60px); border: 3px solid #0f3460; border-radius: 4px; box-shadow: 0 0 30px rgba(15, 52, 96, 0.5); }
+  .sq { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; font-size: 44px; cursor: default; position: relative; transition: background 0.15s; line-height: 1; }
+  .sq .piece-w { color: #ffffff; text-shadow: 0 0 2px #000, 0 0 2px #000, 1px 1px 1px rgba(0,0,0,0.6); }
+  .sq .piece-b { color: #1a1a1a; text-shadow: 0 0 3px rgba(255,255,255,0.3); }
+  .sq.light { background: #f0d9b5; }
+  .sq.dark { background: #8ca2ad; }
+  .sq.highlight { box-shadow: inset 0 0 0 3px #ff6b6b; }
+  .sq.last-from { background: #aad576 !important; }
+  .sq.last-to { background: #7ec945 !important; }
+
+  .rank-label, .file-label { position: absolute; font-size: 10px; font-weight: 700; opacity: 0.6; }
+  .rank-label { top: 2px; left: 3px; }
+  .file-label { bottom: 1px; right: 3px; }
+  .sq.light .rank-label, .sq.light .file-label { color: #b08968; }
+  .sq.dark .rank-label, .sq.dark .file-label { color: #d5e0e5; }
+
+  /* Controls */
+  .controls { display: flex; align-items: center; gap: 8px; }
+  .controls button { background: #16213e; border: 1px solid #0f3460; color: #eee; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 16px; transition: background 0.15s; }
+  .controls button:hover { background: #0f3460; }
+  .controls button:disabled { opacity: 0.3; cursor: default; }
+  .speed-label { font-size: 13px; color: #aaa; margin-left: 8px; }
+  #speedSlider { width: 100px; accent-color: #e94560; }
+
+  /* Sidebar */
+  .sidebar { display: flex; flex-direction: column; gap: 16px; min-width: 300px; max-width: 380px; flex: 1; }
+  .panel { background: #16213e; border-radius: 10px; padding: 16px; }
+  .panel h3 { font-size: 14px; color: #e94560; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+
+  /* Standings */
+  .standings-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .standings-table th { text-align: left; padding: 4px 8px; color: #aaa; border-bottom: 1px solid #333; }
+  .standings-table td { padding: 6px 8px; }
+  .standings-table tr.active-bot td { color: #f1c40f; font-weight: 600; }
+  .medal { margin-right: 4px; }
+
+  /* Game selector */
+  .game-list { display: flex; flex-direction: column; gap: 6px; }
+  .game-btn { background: #1a1a2e; border: 1px solid #333; color: #ccc; padding: 10px 12px; border-radius: 8px; cursor: pointer; text-align: left; font-size: 13px; transition: all 0.15s; }
+  .game-btn:hover { border-color: #e94560; }
+  .game-btn.active { border-color: #e94560; background: #2a1a3e; color: #fff; }
+  .game-btn .game-result { float: right; font-weight: 700; }
+  .game-btn .game-players { font-weight: 600; }
+  .game-btn .game-info { font-size: 11px; color: #888; margin-top: 3px; }
+
+  /* Move list */
+  .move-list { max-height: 220px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.7; padding: 8px; background: #111; border-radius: 6px; }
+  .move-list::-webkit-scrollbar { width: 6px; }
+  .move-list::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+  .move-num { color: #888; }
+  .move-san { cursor: pointer; padding: 1px 3px; border-radius: 3px; }
+  .move-san:hover { background: #333; }
+  .move-san.current { background: #e94560; color: #fff; }
+
+  /* Status */
+  .status-bar { text-align: center; font-size: 14px; min-height: 22px; color: #f39c12; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="board-wrap">
+    <div class="player-bar" id="topBar">
+      <div class="dot black"></div>
+      <span class="name" id="topName">-</span>
+      <span class="badge" id="topBadge"></span>
+    </div>
+    <div id="board"></div>
+    <div class="player-bar" id="bottomBar">
+      <div class="dot white"></div>
+      <span class="name" id="bottomName">-</span>
+      <span class="badge" id="bottomBadge"></span>
+    </div>
+    <div class="status-bar" id="status"></div>
+    <div class="controls">
+      <button id="btnStart" title="처음">&#x23EE;</button>
+      <button id="btnPrev" title="이전">&#x25C0;</button>
+      <button id="btnPlay" title="재생/정지">&#x25B6;</button>
+      <button id="btnNext" title="다음">&#x25B6;&#xFE0E;</button>
+      <button id="btnEnd" title="끝">&#x23ED;</button>
+      <span class="speed-label">속도</span>
+      <input type="range" id="speedSlider" min="1" max="10" value="5">
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="panel">
+      <h3>순위</h3>
+      <table class="standings-table" id="standings"></table>
+    </div>
+    <div class="panel">
+      <h3>대국 선택</h3>
+      <div class="game-list" id="gameList"></div>
+    </div>
+    <div class="panel">
+      <h3>기보</h3>
+      <div class="move-list" id="moveList"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── PGN Data (embedded) ──
+const PGN_DATA = `[Event "RL Chess Bot Tournament"]
+[Site "?"]
+[Date "2026.03.06"]
+[Round "1"]
+[White "sample_bot_random"]
+[Black "sample_bot_greedy"]
+[Result "0-1"]
+[Opening "d4 (1. d2d4)"]
+[Termination "체크메이트 (흑 승리)"]
+
+1. d4 c6 2. Nc3 e5 3. Na4 exd4 4. Nc3 dxc3 5. bxc3 Bb4 6. Bd2 Bxc3 7. Bxc3 Qc7 8. Ba5 Qxa5+ 9. c3 Qxc3+ 10. Qd2 Qxd2+ 11. Kxd2 Ke7 12. a4 Kd8 13. f4 g5 14. h3 gxf4 15. Ke1 f3 16. Nxf3 Na6 17. Rh2 d5 18. Nd4 Bxh3 19. Nf5 Bxf5 20. Rd1 b5 21. axb5 cxb5 22. Rh6 Nxh6 23. Rd2 Bh3 24. Rd1 Bxg2 25. Rd2 Bxf1 26. Rc2 Bxe2 27. Rc4 Bxc4 28. Kd1 Ke7 29. Ke1 Rhc8 30. Kd2 Rc7 31. Kc1 Kd8 32. Kd2 Rb7 33. Kc1 Kc7 34. Kd1 d4 35. Kc1 Rh8 36. Kb1 Rf8 37. Kc1 Kd6 38. Kd1 Bd5 39. Kc2 Ke6 40. Kc1 Kf6 41. Kc2 Bh1 42. Kb2 Bc6 43. Kb1 Rfb8 44. Kc2 Rc7 45. Kb3 Rcb7 46. Ka2 b4 47. Kb2 b3 48. Ka3 Nc5 49. Kb2 Ng8 50. Ka3 Ne7 51. Kb2 Nd7 52. Kc1 Nf8 53. Kd1 Be4 54. Kc1 a5 55. Kb2 Kg7 56. Ka1 Bh1 57. Kb1 d3 58. Ka1 Nf5 59. Kb1 Kf6 60. Kb2 Ne6 61. Kc1 Be4 62. Kd1 a4 63. Ke1 h5 64. Kf2 Kg7 65. Ke1 h4 66. Kd1 Rc8 67. Kd2 Kg8 68. Ke1 Bf3 69. Kf2 Kf8 70. Kf1 b2 71. Ke1 Rc2 72. Kf1 b1=Q# 0-1
+
+[Event "RL Chess Bot Tournament"]
+[Site "?"]
+[Date "2026.03.06"]
+[Round "2"]
+[White "sample_bot_greedy"]
+[Black "sample_bot_random"]
+[Result "1-0"]
+[Opening "d4 (1. d2d4)"]
+[Termination "체크메이트 (백 승리)"]
+
+1. d4 d5 2. Bd2 g6 3. Bb4 e5 4. Bxf8 exd4 5. Qxd4 Nf6 6. Qxf6 Qd7 7. Qxh8 g5 8. Bd6# 1-0
+
+[Event "RL Chess Bot Tournament"]
+[Site "?"]
+[Date "2026.03.06"]
+[Round "3"]
+[White "sample_bot_random"]
+[Black "sample_bot_center"]
+[Result "0-1"]
+[Opening "e4 (1. e2e4)"]
+[Termination "체크메이트 (흑 승리)"]
+
+1. e4 d5 2. Qf3 dxe4 3. Nc3 exf3 4. gxf3 Qd4 5. Ba6 Qe5+ 6. Kd1 Qxc3 7. Ke2 Qe5+ 8. Kd1 Qd4 9. d3 Qe5 10. Bg5 Qd5 11. Bf4 e5 12. Bc1 Qe4 13. c3 Qxf3+ 14. Kd2 Qd5 15. Ke2 Qxd3+ 16. Ke1 Qd4 17. Nf3 e4 18. Nh4 Qxc3+ 19. Bd2 Qd4 20. Rf1 Qd5 21. b4 Qd4 22. f4 exf3 23. Kd1 Qe4 24. a4 Qe5 25. Bc4 Qd5 26. Nf5 Qd4 27. Be6 Bxe6 28. Ne3 Bd5 29. Kc1 Qe4 30. h4 Qxe3 31. a5 Qe5 32. Rd1 Qe4 33. Bf4 Qd4 34. Bd6 Qe5 35. b5 Bxd6 36. Rd4 Qxd4 37. Ra3 Be5 38. Rxf3 Qe4 39. Re3 Qd4 40. Re4 Bxe4 41. a6 Bf4# 0-1
+
+[Event "RL Chess Bot Tournament"]
+[Site "?"]
+[Date "2026.03.06"]
+[Round "4"]
+[White "sample_bot_center"]
+[Black "sample_bot_random"]
+[Result "1/2-1/2"]
+[Opening "e4 (1. e2e4)"]
+[Termination "3회 반복 (무승부)"]
+
+1. e4 g6 2. e5 a5 3. d4 b6 4. d5 Bb7 5. Qd4 Ra7 6. Qe4 Ra6 7. Qd4 Nc6 8. dxc6 Bc8 9. Qd5 Bb7 10. Qd4 dxc6 11. Qe4 Qd6 12. Qd4 Qa3 13. Qe4 Nf6 14. Qd5 Bg7 15. Qe4 Nd5 16. Qxd5 Qb3 17. Qd4 h6 18. Qe4 Ba8 19. Qxc6+ Kf8 20. Qd5 Bxd5 21. cxb3 Be4 22. Bxh6 Bf5 23. Bxa6 f6 24. exf6 c5 25. Bxg7+ Kg8 26. Bxh8 Bh3 27. Nxh3 g5 28. Nxg5 b5 29. Ne4 Kf7 30. Nxc5 Kg6 31. Ne4 exf6 32. Bxf6 a4 33. Bd4 b4 34. Be5 Kh7 35. Bd4 axb3 36. Be5 Kh6 37. Bd4 Kh5 38. Be5 Kg6 39. Bd4 Kh7 40. Be5 Kh6 41. Bd4 1/2-1/2
+
+[Event "RL Chess Bot Tournament"]
+[Site "?"]
+[Date "2026.03.06"]
+[Round "5"]
+[White "sample_bot_greedy"]
+[Black "sample_bot_center"]
+[Result "1/2-1/2"]
+[Opening "d4 (1. d2d4)"]
+[Termination "불충분 기물 (무승부)"]
+
+1. d4 e5 2. dxe5 d5 3. Qxd5 Qxd5 4. c3 Qxe5 5. Kd2 Qd4+ 6. cxd4 f5 7. Ke1 Nc6 8. Be3 Nxd4 9. Bxd4 c5 10. Bxg7 Bxg7 11. Na3 Bd4 12. Nf3 Be5 13. Nxe5 c4 14. Nexc4 Nf6 15. b3 Nd5 16. Nd6+ Ke7 17. Nxc8+ Rhxc8 18. e3 Nxe3 19. fxe3 Rc3 20. Nc2 Rxe3+ 21. Nxe3 Kd6 22. Nxf5+ Kd5 23. Bc4+ Ke5 24. Be6 Ke4 25. Ng3+ Ke5 26. Rf1 Kxe6 27. Rf7 Kd5 28. Rxh7 Kd4 29. Rxb7 Kd5 30. Rxa7 Kd4 31. Rxa8 Ke5 32. Nf5 Kd5 33. h3 Ke5 34. a3 Kxf5 35. b4 Ke5 36. Rf8 Kd4 37. Rc8 Kd5 38. Rac1 Ke4 39. R1c5 Kd4 40. Kd1 Ke4 41. R8c6 Kd4 42. h4 Ke4 43. Rh6 Kd4 44. Rh8 Ke4 45. Rb5 Kd4 46. Kd2 Ke4 47. Ke2 Kd4 48. Rd8+ Ke4 49. Rd6 Kf4 50. Kd2 Ke4 51. Rd8 Kf4 52. Rd4+ Kg3 53. Rh5 Kxg2 54. Re4 Kf3 55. Kc1 Kxe4 56. a4 Kd4 57. Rd5+ Kxd5 58. Kd1 Kd4 59. Ke2 Kd5 60. Ke1 Ke4 61. b5 Kd5 62. Kd1 Ke5 63. Kd2 Kd4 64. Ke1 Ke5 65. h5 Kd5 66. a5 Ke5 67. Kd2 Kd5 68. Kc2 Ke5 69. Kb2 Kd5 70. a6 Kd4 71. h6 Kd5 72. Kc1 Kd4 73. Kd2 Ke5 74. Kd1 Kd4 75. Ke2 Kd5 76. Ke1 Ke5 77. b6 Kd4 78. Kf2 Ke4 79. b7 Kd5 80. Ke3 Ke5 81. b8=N Kd5 82. Kd3 Ke5 83. h7 Kd5 84. Ke3 Ke5 85. h8=N Kd5 86. Kf3 Kd4 87. Ke2 Ke5 88. Nd7+ Kd4 89. Nb6 Ke4 90. Nf7 Kd4 91. Ng5 Ke5 92. Kf3 Kd4 93. Ne6+ Ke5 94. Kf2 Kxe6 95. Kg3 Ke5 96. Kg4 Kd4 97. Nd7 Kd5 98. Kf5 Kd4 99. Nc5 Kd5 100. Kg6 Ke5 101. Nb7 Ke4 102. a7 Kd5 103. a8=B Kd4 104. Kf5 Kd5 105. Kf4 Kd4 106. Kg5 Kd5 107. Kh6 Ke5 108. Kg7 Kd4 109. Kf8 Kd5 110. Kg8 Ke5 111. Kh8 Ke4 112. Nc5+ Ke5 113. Be4 Kd4 114. Nd3 Kxe4 1/2-1/2
+
+[Event "RL Chess Bot Tournament"]
+[Site "?"]
+[Date "2026.03.06"]
+[Round "6"]
+[White "sample_bot_center"]
+[Black "sample_bot_greedy"]
+[Result "0-1"]
+[Opening "d4 (1. d2d4)"]
+[Termination "체크메이트 (흑 승리)"]
+
+1. d4 a5 2. d5 Nh6 3. Qd4 g5 4. Qe5 Ng8 5. Qd4 Ra6 6. e4 a4 7. Qe5 Rg6 8. Qd4 a3 9. e5 axb2 10. Qe4 bxa1=Q 11. Qd4 Qxd4 12. Bxg5 Rxg5 13. Nc3 Qxc3+ 14. Kd1 Rxe5 15. Bd3 Re1# 0-1`;
+
+// ── Minimal Chess Engine (board state + SAN parser) ──
+const PIECE_UNICODE = {
+  K: '\u2654', Q: '\u2655', R: '\u2656', B: '\u2657', N: '\u2658', P: '\u2659',
+  k: '\u265A', q: '\u265B', r: '\u265C', b: '\u265D', n: '\u265E', p: '\u265F'
+};
+
+class ChessGame {
+  constructor() { this.reset(); }
+  reset() {
+    this.board = this.initBoard();
+    this.turn = 'w';
+    this.castling = { K: true, Q: true, k: true, q: true };
+    this.enPassant = null;
+  }
+  initBoard() {
+    const b = Array(8).fill(null).map(() => Array(8).fill(null));
+    const back = ['r','n','b','q','k','b','n','r'];
+    for (let c = 0; c < 8; c++) {
+      b[0][c] = back[c]; b[1][c] = 'p';
+      b[6][c] = 'P'; b[7][c] = back[c].toUpperCase();
+    }
+    return b;
+  }
+  get(r, c) { return this.board[r]?.[c] ?? null; }
+  set(r, c, v) { this.board[r][c] = v; }
+  isWhite(p) { return p && p === p.toUpperCase(); }
+
+  applyMove(san) {
+    const white = this.turn === 'w';
+    let from, to, promo = null;
+
+    // Castling
+    if (san === 'O-O' || san === 'O-O-O') {
+      const row = white ? 7 : 0;
+      const king = white ? 'K' : 'k'; const rook = white ? 'R' : 'r';
+      if (san === 'O-O') {
+        this.set(row, 4, null); this.set(row, 7, null);
+        this.set(row, 6, king); this.set(row, 5, rook);
+        from = [row, 4]; to = [row, 6];
+      } else {
+        this.set(row, 4, null); this.set(row, 0, null);
+        this.set(row, 2, king); this.set(row, 3, rook);
+        from = [row, 4]; to = [row, 2];
+      }
+      this.updateCastling(from, to);
+      this.enPassant = null;
+      this.turn = white ? 'b' : 'w';
+      return { from, to };
+    }
+
+    // Strip check/mate symbols
+    let s = san.replace(/[+#!?]/g, '');
+
+    // Promotion
+    if (s.includes('=')) {
+      const parts = s.split('=');
+      s = parts[0];
+      promo = white ? parts[1][0] : parts[1][0].toLowerCase();
+    }
+
+    // Pawn move
+    if (s[0] >= 'a' && s[0] <= 'h') {
+      const isCapture = s.includes('x');
+      const dest = isCapture ? s.split('x')[1] : s;
+      const tc = dest.charCodeAt(0) - 97;
+      const tr = 8 - parseInt(dest[1]);
+      const fc = isCapture ? (s.charCodeAt(0) - 97) : tc;
+      const dir = white ? 1 : -1;
+      let fr = -1;
+
+      if (isCapture) {
+        // En passant or normal capture
+        if (this.get(tr, tc) !== null) {
+          fr = tr + dir;
+        } else if (this.enPassant && this.enPassant[0] === tr && this.enPassant[1] === tc) {
+          fr = tr + dir;
+          this.set(tr + dir, tc, null); // remove captured pawn
+        } else {
+          fr = tr + dir;
+        }
+      } else {
+        if (this.get(tr, tc) === null) {
+          if (this.get(tr + dir, fc) !== null && ((white && this.get(tr + dir, fc) === 'P') || (!white && this.get(tr + dir, fc) === 'p'))) {
+            fr = tr + dir;
+          } else if (this.get(tr + 2 * dir, fc) !== null) {
+            fr = tr + 2 * dir;
+          }
+        }
+      }
+
+      from = [fr, fc]; to = [tr, tc];
+      this.set(tr, tc, promo || this.get(fr, fc));
+      this.set(fr, fc, null);
+
+      // Set en passant
+      if (Math.abs(fr - tr) === 2) {
+        this.enPassant = [Math.floor((fr + tr) / 2), tc];
+      } else {
+        this.enPassant = null;
+      }
+
+      this.updateCastling(from, to);
+      this.turn = white ? 'b' : 'w';
+      return { from, to };
+    }
+
+    // Piece move
+    const pieceChar = s[0];
+    const piece = white ? pieceChar : pieceChar.toLowerCase();
+    let rest = s.slice(1);
+    let disambigFile = -1, disambigRank = -1;
+
+    if (rest.includes('x')) {
+      const before = rest.split('x')[0];
+      rest = rest.split('x')[1];
+      if (before.length === 1) {
+        if (before[0] >= 'a' && before[0] <= 'h') disambigFile = before.charCodeAt(0) - 97;
+        else disambigRank = 8 - parseInt(before[0]);
+      } else if (before.length === 2) {
+        disambigFile = before.charCodeAt(0) - 97;
+        disambigRank = 8 - parseInt(before[1]);
+      }
+    } else {
+      if (rest.length === 3) {
+        if (rest[0] >= 'a' && rest[0] <= 'h') disambigFile = rest.charCodeAt(0) - 97;
+        else disambigRank = 8 - parseInt(rest[0]);
+        rest = rest.slice(1);
+      } else if (rest.length === 4) {
+        disambigFile = rest.charCodeAt(0) - 97;
+        disambigRank = 8 - parseInt(rest[1]);
+        rest = rest.slice(2);
+      }
+    }
+
+    const tc = rest.charCodeAt(0) - 97;
+    const tr = 8 - parseInt(rest[1]);
+
+    // Find the piece
+    const candidates = this.findPiece(piece, tr, tc, disambigFile, disambigRank);
+    if (candidates.length === 0) {
+      console.warn('No candidate for', san, piece, tr, tc);
+      this.turn = white ? 'b' : 'w';
+      return { from: [tr, tc], to: [tr, tc] };
+    }
+
+    from = candidates[0];
+    this.set(tr, tc, piece);
+    this.set(from[0], from[1], null);
+    to = [tr, tc];
+    this.enPassant = null;
+    this.updateCastling(from, to);
+    this.turn = white ? 'b' : 'w';
+    return { from, to };
+  }
+
+  updateCastling(from, to) {
+    if (from[0] === 7 && from[1] === 4) { this.castling.K = false; this.castling.Q = false; }
+    if (from[0] === 0 && from[1] === 4) { this.castling.k = false; this.castling.q = false; }
+    if (from[0] === 7 && from[1] === 7) this.castling.K = false;
+    if (from[0] === 7 && from[1] === 0) this.castling.Q = false;
+    if (from[0] === 0 && from[1] === 7) this.castling.k = false;
+    if (from[0] === 0 && from[1] === 0) this.castling.q = false;
+    if (to[0] === 7 && to[1] === 7) this.castling.K = false;
+    if (to[0] === 7 && to[1] === 0) this.castling.Q = false;
+    if (to[0] === 0 && to[1] === 7) this.castling.k = false;
+    if (to[0] === 0 && to[1] === 0) this.castling.q = false;
+  }
+
+  findPiece(piece, tr, tc, disambigFile, disambigRank) {
+    const results = [];
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        if (this.get(r, c) !== piece) continue;
+        if (disambigFile >= 0 && c !== disambigFile) continue;
+        if (disambigRank >= 0 && r !== disambigRank) continue;
+        if (this.canReach(piece, r, c, tr, tc)) results.push([r, c]);
+      }
+    }
+    return results;
+  }
+
+  canReach(piece, fr, fc, tr, tc) {
+    const dr = tr - fr, dc = tc - fc;
+    const type = piece.toUpperCase();
+    if (type === 'N') return (Math.abs(dr) === 2 && Math.abs(dc) === 1) || (Math.abs(dr) === 1 && Math.abs(dc) === 2);
+    if (type === 'B') return Math.abs(dr) === Math.abs(dc) && dr !== 0 && this.pathClear(fr, fc, tr, tc);
+    if (type === 'R') return (dr === 0 || dc === 0) && (dr !== 0 || dc !== 0) && this.pathClear(fr, fc, tr, tc);
+    if (type === 'Q') return ((dr === 0 || dc === 0) || Math.abs(dr) === Math.abs(dc)) && (dr !== 0 || dc !== 0) && this.pathClear(fr, fc, tr, tc);
+    if (type === 'K') return Math.abs(dr) <= 1 && Math.abs(dc) <= 1;
+    return false;
+  }
+
+  pathClear(fr, fc, tr, tc) {
+    const dr = Math.sign(tr - fr), dc = Math.sign(tc - fc);
+    let r = fr + dr, c = fc + dc;
+    while (r !== tr || c !== tc) {
+      if (this.get(r, c) !== null) return false;
+      r += dr; c += dc;
+    }
+    return true;
+  }
+
+  clone() {
+    const g = new ChessGame();
+    g.board = this.board.map(r => [...r]);
+    g.turn = this.turn;
+    g.castling = { ...this.castling };
+    g.enPassant = this.enPassant ? [...this.enPassant] : null;
+    return g;
+  }
+}
+
+// ── PGN Parser ──
+function parsePGN(pgn) {
+  const games = [];
+  const blocks = pgn.trim().split(/\n\n(?=\[)/);
+  let i = 0;
+  while (i < blocks.length) {
+    const headerBlock = blocks[i];
+    const headers = {};
+    const headerRegex = /\[(\w+)\s+"([^"]*)"\]/g;
+    let m;
+    while ((m = headerRegex.exec(headerBlock)) !== null) headers[m[1]] = m[2];
+
+    // Find moves - could be in the same block after a blank line, or in next block
+    let movesText = '';
+    const headerEnd = headerBlock.lastIndexOf(']');
+    const afterHeaders = headerBlock.slice(headerEnd + 1).trim();
+    if (afterHeaders && !afterHeaders.startsWith('[')) {
+      movesText = afterHeaders;
+    } else if (i + 1 < blocks.length && !blocks[i + 1].startsWith('[')) {
+      i++;
+      movesText = blocks[i];
+    }
+
+    // Parse moves
+    const moves = [];
+    if (movesText) {
+      const cleaned = movesText.replace(/\{[^}]*\}/g, '').replace(/\([^)]*\)/g, '');
+      const tokens = cleaned.split(/\s+/);
+      for (const t of tokens) {
+        if (!t) continue;
+        if (t.match(/^\d+\.+$/)) continue;
+        if (['1-0','0-1','1/2-1/2','*'].includes(t)) continue;
+        // Remove move number prefix like "1."
+        const san = t.replace(/^\d+\./, '');
+        if (san) moves.push(san);
+      }
+    }
+
+    games.push({ headers, moves });
+    i++;
+  }
+  return games;
+}
+
+// ── Globals ──
+const games = parsePGN(PGN_DATA);
+let currentGame = 0;
+let currentMove = 0;
+let positions = []; // array of { board (snapshot), lastFrom, lastTo }
+let playing = false;
+let playTimer = null;
+
+const standings = [
+  { name: 'sample_bot_greedy', score: 3.5, w: 3, d: 1, l: 0 },
+  { name: 'sample_bot_center', score: 2.0, w: 1, d: 2, l: 1 },
+  { name: 'sample_bot_random', score: 0.5, w: 0, d: 1, l: 3 },
+];
+const medals = ['&#x1F947;', '&#x1F948;', '&#x1F949;'];
+
+// ── Build positions for a game ──
+function buildPositions(gameIdx) {
+  const g = games[gameIdx];
+  const engine = new ChessGame();
+  const snaps = [{ board: engine.board.map(r => [...r]), from: null, to: null }];
+  for (const san of g.moves) {
+    const { from, to } = engine.applyMove(san);
+    snaps.push({ board: engine.board.map(r => [...r]), from, to });
+  }
+  return snaps;
+}
+
+// ── Render ──
+function renderBoard() {
+  const pos = positions[currentMove];
+  const boardEl = document.getElementById('board');
+  boardEl.innerHTML = '';
+  const files = 'abcdefgh';
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const sq = document.createElement('div');
+      const isLight = (r + c) % 2 === 0;
+      sq.className = 'sq ' + (isLight ? 'light' : 'dark');
+
+      if (pos.from && pos.from[0] === r && pos.from[1] === c) sq.classList.add('last-from');
+      if (pos.to && pos.to[0] === r && pos.to[1] === c) sq.classList.add('last-to');
+
+      const piece = pos.board[r][c];
+      if (piece) {
+        const span = document.createElement('span');
+        span.textContent = PIECE_UNICODE[piece];
+        span.className = (piece === piece.toUpperCase()) ? 'piece-w' : 'piece-b';
+        sq.appendChild(span);
+      }
+
+      // Labels
+      if (c === 0) {
+        const rl = document.createElement('span');
+        rl.className = 'rank-label';
+        rl.textContent = 8 - r;
+        sq.appendChild(rl);
+      }
+      if (r === 7) {
+        const fl = document.createElement('span');
+        fl.className = 'file-label';
+        fl.textContent = files[c];
+        sq.appendChild(fl);
+      }
+
+      boardEl.appendChild(sq);
+    }
+  }
+}
+
+function renderPlayerBars() {
+  const g = games[currentGame];
+  document.getElementById('topName').textContent = g.headers.Black;
+  document.getElementById('bottomName').textContent = g.headers.White;
+  const result = g.headers.Result;
+
+  const topBadge = document.getElementById('topBadge');
+  const bottomBadge = document.getElementById('bottomBadge');
+
+  if (currentMove < positions.length - 1) {
+    topBadge.textContent = ''; bottomBadge.textContent = '';
+    topBadge.className = 'badge'; bottomBadge.className = 'badge';
+  } else {
+    if (result === '1-0') {
+      bottomBadge.textContent = 'WIN'; bottomBadge.className = 'badge win';
+      topBadge.textContent = 'LOSE'; topBadge.className = 'badge lose';
+    } else if (result === '0-1') {
+      topBadge.textContent = 'WIN'; topBadge.className = 'badge win';
+      bottomBadge.textContent = 'LOSE'; bottomBadge.className = 'badge lose';
+    } else {
+      topBadge.textContent = 'DRAW'; topBadge.className = 'badge draw';
+      bottomBadge.textContent = 'DRAW'; bottomBadge.className = 'badge draw';
+    }
+  }
+}
+
+function renderStatus() {
+  const g = games[currentGame];
+  const el = document.getElementById('status');
+  if (currentMove >= positions.length - 1) {
+    el.textContent = g.headers.Termination || g.headers.Result;
+  } else {
+    const moveNum = Math.floor(currentMove / 2) + 1;
+    const side = currentMove % 2 === 0 ? '백 차례' : '흑 차례';
+    el.textContent = currentMove === 0 ? '대국 시작' : `${moveNum}수 - ${side}`;
+  }
+}
+
+function renderMoveList() {
+  const g = games[currentGame];
+  const el = document.getElementById('moveList');
+  let html = '';
+  for (let i = 0; i < g.moves.length; i++) {
+    if (i % 2 === 0) html += `<span class="move-num">${Math.floor(i / 2) + 1}.</span> `;
+    const cls = (i + 1 === currentMove) ? 'current' : '';
+    html += `<span class="move-san ${cls}" data-idx="${i + 1}">${g.moves[i]}</span> `;
+    if (i % 2 === 1) html += '<br>';
+  }
+  el.innerHTML = html;
+
+  // Scroll to current
+  const cur = el.querySelector('.move-san.current');
+  if (cur) cur.scrollIntoView({ block: 'nearest' });
+
+  // Click handler
+  el.querySelectorAll('.move-san').forEach(span => {
+    span.addEventListener('click', () => {
+      stopPlay();
+      currentMove = parseInt(span.dataset.idx);
+      renderAll();
+    });
+  });
+}
+
+function renderStandings() {
+  const g = games[currentGame];
+  const activeBots = [g.headers.White, g.headers.Black];
+  let html = '<tr><th></th><th>봇</th><th>점수</th><th>승</th><th>무</th><th>패</th></tr>';
+  standings.forEach((s, i) => {
+    const cls = activeBots.includes(s.name) ? ' class="active-bot"' : '';
+    html += `<tr${cls}><td><span class="medal">${medals[i]}</span></td><td>${s.name.replace('sample_bot_','')}</td><td>${s.score}</td><td>${s.w}</td><td>${s.d}</td><td>${s.l}</td></tr>`;
+  });
+  document.getElementById('standings').innerHTML = html;
+}
+
+function renderGameList() {
+  const el = document.getElementById('gameList');
+  el.innerHTML = '';
+  games.forEach((g, i) => {
+    const btn = document.createElement('div');
+    btn.className = 'game-btn' + (i === currentGame ? ' active' : '');
+    const resultColor = g.headers.Result === '1-0' ? '#2ecc71' : g.headers.Result === '0-1' ? '#e74c3c' : '#f39c12';
+    btn.innerHTML = `
+      <span class="game-players">${g.headers.White} vs ${g.headers.Black}</span>
+      <span class="game-result" style="color:${resultColor}">${g.headers.Result}</span>
+      <div class="game-info">Round ${g.headers.Round} | ${g.headers.Opening} | ${g.moves.length}수 | ${g.headers.Termination}</div>
+    `;
+    btn.addEventListener('click', () => loadGame(i));
+    el.appendChild(btn);
+  });
+}
+
+function renderAll() {
+  renderBoard();
+  renderPlayerBars();
+  renderStatus();
+  renderMoveList();
+  updateButtons();
+}
+
+function updateButtons() {
+  document.getElementById('btnPrev').disabled = currentMove <= 0;
+  document.getElementById('btnStart').disabled = currentMove <= 0;
+  document.getElementById('btnNext').disabled = currentMove >= positions.length - 1;
+  document.getElementById('btnEnd').disabled = currentMove >= positions.length - 1;
+  document.getElementById('btnPlay').innerHTML = playing ? '&#x23F8;' : '&#x25B6;';
+}
+
+// ── Navigation ──
+function loadGame(idx) {
+  stopPlay();
+  currentGame = idx;
+  currentMove = 0;
+  positions = buildPositions(idx);
+  renderGameList();
+  renderStandings();
+  renderAll();
+}
+
+function goNext() {
+  if (currentMove < positions.length - 1) { currentMove++; renderAll(); }
+  else stopPlay();
+}
+function goPrev() { if (currentMove > 0) { currentMove--; renderAll(); } }
+function goStart() { currentMove = 0; renderAll(); }
+function goEnd() { currentMove = positions.length - 1; renderAll(); }
+
+function getSpeed() {
+  const v = parseInt(document.getElementById('speedSlider').value);
+  return 1200 - v * 100; // 1100ms ~ 200ms
+}
+
+function startPlay() {
+  if (currentMove >= positions.length - 1) currentMove = 0;
+  playing = true;
+  updateButtons();
+  playTimer = setInterval(() => {
+    if (currentMove >= positions.length - 1) { stopPlay(); return; }
+    currentMove++;
+    renderAll();
+  }, getSpeed());
+}
+
+function stopPlay() {
+  playing = false;
+  clearInterval(playTimer);
+  updateButtons();
+}
+
+function togglePlay() { playing ? stopPlay() : startPlay(); }
+
+// ── Events ──
+document.getElementById('btnPlay').addEventListener('click', togglePlay);
+document.getElementById('btnNext').addEventListener('click', () => { stopPlay(); goNext(); });
+document.getElementById('btnPrev').addEventListener('click', () => { stopPlay(); goPrev(); });
+document.getElementById('btnStart').addEventListener('click', () => { stopPlay(); goStart(); });
+document.getElementById('btnEnd').addEventListener('click', () => { stopPlay(); goEnd(); });
+document.getElementById('speedSlider').addEventListener('input', () => {
+  if (playing) { stopPlay(); startPlay(); }
+});
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight') { stopPlay(); goNext(); }
+  else if (e.key === 'ArrowLeft') { stopPlay(); goPrev(); }
+  else if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+  else if (e.key === 'Home') { stopPlay(); goStart(); }
+  else if (e.key === 'End') { stopPlay(); goEnd(); }
+});
+
+// ── Init ──
+loadGame(0);
+</script>
+</body>
+</html>
