@@ -4,3 +4,4 @@ __pycache__/
 tournament_*/
 bots/
 model.pt
+live_state.json
