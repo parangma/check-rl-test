@@ -77,11 +77,56 @@
 
   /* Status */
   .status-bar { text-align: center; font-size: 14px; min-height: 22px; color: #f39c12; font-weight: 600; }
+
+  /* Mode badges */
+  .live-badge { display: inline-flex; align-items: center; gap: 6px; background: #e94560; color: #fff; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; }
+  .live-badge .dot { width: 8px; height: 8px; border-radius: 50%; background: #fff; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .mode-btn { font-weight: 700; font-size: 13px !important; }
+  .mode-btn.live { background: #e94560 !important; border-color: #e94560 !important; }
+  .mode-btn.live:hover { background: #c0392b !important; }
+  .mode-btn.stop { background: #555 !important; border-color: #555 !important; }
+  .mode-btn.stop:hover { background: #c0392b !important; }
+  .mode-btn.replay { background: #2ecc71 !important; border-color: #2ecc71 !important; color: #000 !important; }
+  .mode-btn.replay:hover { background: #27ae60 !important; }
+
+  /* Mode overlay */
+  .mode-select { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 40px; text-align: center; }
+  .mode-select h2 { font-size: 20px; color: #e94560; }
+  .mode-select p { color: #aaa; font-size: 14px; }
+  .mode-select .btn-row { display: flex; gap: 12px; }
+  .mode-select button { padding: 12px 28px; border-radius: 8px; border: none; font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.15s; }
+  .mode-select .btn-live { background: #e94560; color: #fff; }
+  .mode-select .btn-live:hover { background: #c0392b; }
+  .mode-select .btn-replay { background: #2ecc71; color: #000; }
+  .mode-select .btn-replay:hover { background: #27ae60; }
+  .mode-select .btn-live:disabled { opacity: 0.4; cursor: default; }
+  .file-drop { border: 2px dashed #555; border-radius: 10px; padding: 20px; color: #888; font-size: 13px; cursor: pointer; transition: border-color 0.2s; max-width: 400px; }
+  .file-drop:hover, .file-drop.dragover { border-color: #2ecc71; color: #eee; }
+  .file-drop input { display: none; }
 </style>
 </head>
 <body>
 
-<div class="container">
+<!-- Mode Selection Overlay -->
+<div id="modeOverlay" class="mode-select" style="display:none;">
+  <h2>Chess Tournament Viewer</h2>
+  <p id="modeDesc">모드를 선택하세요</p>
+  <div class="btn-row">
+    <button class="btn-live" id="btnModeLive">LIVE 관전</button>
+    <button class="btn-replay" id="btnModeReplay">복기 모드</button>
+  </div>
+  <div id="fileUploadArea" style="display:none; margin-top: 12px;">
+    <div class="file-drop" id="fileDrop">
+      토너먼트 결과 폴더의 <b>all_games.pgn</b>과 <b>results.json</b>을<br>
+      여기에 드래그하거나 클릭하여 선택하세요
+      <input type="file" id="fileInput" multiple accept=".pgn,.json">
+    </div>
+  </div>
+</div>
+
+<!-- Main Viewer (hidden until mode selected) -->
+<div class="container" id="mainViewer" style="display:none;">
   <div class="board-wrap">
     <div class="player-bar" id="topBar">
       <div class="dot black"></div>
@@ -95,6 +140,9 @@
       <span class="badge" id="bottomBadge"></span>
     </div>
     <div class="status-bar" id="status"></div>
+    <div class="controls" style="margin-bottom: 4px;">
+      <button id="btnStop" class="mode-btn stop" title="대국 중단" style="display:none;">STOP</button>
+    </div>
     <div class="controls">
       <button id="btnStart" title="처음">&#x23EE;</button>
       <button id="btnPrev" title="이전">&#x25C0;</button>
@@ -123,79 +171,6 @@
 </div>
 
 <script>
-// ── PGN Data (embedded) ──
-const PGN_DATA = `[Event "RL Chess Bot Tournament"]
-[Site "?"]
-[Date "2026.03.06"]
-[Round "1"]
-[White "sample_bot_random"]
-[Black "sample_bot_greedy"]
-[Result "0-1"]
-[Opening "d4 (1. d2d4)"]
-[Termination "체크메이트 (흑 승리)"]
-
-1. d4 c6 2. Nc3 e5 3. Na4 exd4 4. Nc3 dxc3 5. bxc3 Bb4 6. Bd2 Bxc3 7. Bxc3 Qc7 8. Ba5 Qxa5+ 9. c3 Qxc3+ 10. Qd2 Qxd2+ 11. Kxd2 Ke7 12. a4 Kd8 13. f4 g5 14. h3 gxf4 15. Ke1 f3 16. Nxf3 Na6 17. Rh2 d5 18. Nd4 Bxh3 19. Nf5 Bxf5 20. Rd1 b5 21. axb5 cxb5 22. Rh6 Nxh6 23. Rd2 Bh3 24. Rd1 Bxg2 25. Rd2 Bxf1 26. Rc2 Bxe2 27. Rc4 Bxc4 28. Kd1 Ke7 29. Ke1 Rhc8 30. Kd2 Rc7 31. Kc1 Kd8 32. Kd2 Rb7 33. Kc1 Kc7 34. Kd1 d4 35. Kc1 Rh8 36. Kb1 Rf8 37. Kc1 Kd6 38. Kd1 Bd5 39. Kc2 Ke6 40. Kc1 Kf6 41. Kc2 Bh1 42. Kb2 Bc6 43. Kb1 Rfb8 44. Kc2 Rc7 45. Kb3 Rcb7 46. Ka2 b4 47. Kb2 b3 48. Ka3 Nc5 49. Kb2 Ng8 50. Ka3 Ne7 51. Kb2 Nd7 52. Kc1 Nf8 53. Kd1 Be4 54. Kc1 a5 55. Kb2 Kg7 56. Ka1 Bh1 57. Kb1 d3 58. Ka1 Nf5 59. Kb1 Kf6 60. Kb2 Ne6 61. Kc1 Be4 62. Kd1 a4 63. Ke1 h5 64. Kf2 Kg7 65. Ke1 h4 66. Kd1 Rc8 67. Kd2 Kg8 68. Ke1 Bf3 69. Kf2 Kf8 70. Kf1 b2 71. Ke1 Rc2 72. Kf1 b1=Q# 0-1
-
-[Event "RL Chess Bot Tournament"]
-[Site "?"]
-[Date "2026.03.06"]
-[Round "2"]
-[White "sample_bot_greedy"]
-[Black "sample_bot_random"]
-[Result "1-0"]
-[Opening "d4 (1. d2d4)"]
-[Termination "체크메이트 (백 승리)"]
-
-1. d4 d5 2. Bd2 g6 3. Bb4 e5 4. Bxf8 exd4 5. Qxd4 Nf6 6. Qxf6 Qd7 7. Qxh8 g5 8. Bd6# 1-0
-
-[Event "RL Chess Bot Tournament"]
-[Site "?"]
-[Date "2026.03.06"]
-[Round "3"]
-[White "sample_bot_random"]
-[Black "sample_bot_center"]
-[Result "0-1"]
-[Opening "e4 (1. e2e4)"]
-[Termination "체크메이트 (흑 승리)"]
-
-1. e4 d5 2. Qf3 dxe4 3. Nc3 exf3 4. gxf3 Qd4 5. Ba6 Qe5+ 6. Kd1 Qxc3 7. Ke2 Qe5+ 8. Kd1 Qd4 9. d3 Qe5 10. Bg5 Qd5 11. Bf4 e5 12. Bc1 Qe4 13. c3 Qxf3+ 14. Kd2 Qd5 15. Ke2 Qxd3+ 16. Ke1 Qd4 17. Nf3 e4 18. Nh4 Qxc3+ 19. Bd2 Qd4 20. Rf1 Qd5 21. b4 Qd4 22. f4 exf3 23. Kd1 Qe4 24. a4 Qe5 25. Bc4 Qd5 26. Nf5 Qd4 27. Be6 Bxe6 28. Ne3 Bd5 29. Kc1 Qe4 30. h4 Qxe3 31. a5 Qe5 32. Rd1 Qe4 33. Bf4 Qd4 34. Bd6 Qe5 35. b5 Bxd6 36. Rd4 Qxd4 37. Ra3 Be5 38. Rxf3 Qe4 39. Re3 Qd4 40. Re4 Bxe4 41. a6 Bf4# 0-1
-
-[Event "RL Chess Bot Tournament"]
-[Site "?"]
-[Date "2026.03.06"]
-[Round "4"]
-[White "sample_bot_center"]
-[Black "sample_bot_random"]
-[Result "1/2-1/2"]
-[Opening "e4 (1. e2e4)"]
-[Termination "3회 반복 (무승부)"]
-
-1. e4 g6 2. e5 a5 3. d4 b6 4. d5 Bb7 5. Qd4 Ra7 6. Qe4 Ra6 7. Qd4 Nc6 8. dxc6 Bc8 9. Qd5 Bb7 10. Qd4 dxc6 11. Qe4 Qd6 12. Qd4 Qa3 13. Qe4 Nf6 14. Qd5 Bg7 15. Qe4 Nd5 16. Qxd5 Qb3 17. Qd4 h6 18. Qe4 Ba8 19. Qxc6+ Kf8 20. Qd5 Bxd5 21. cxb3 Be4 22. Bxh6 Bf5 23. Bxa6 f6 24. exf6 c5 25. Bxg7+ Kg8 26. Bxh8 Bh3 27. Nxh3 g5 28. Nxg5 b5 29. Ne4 Kf7 30. Nxc5 Kg6 31. Ne4 exf6 32. Bxf6 a4 33. Bd4 b4 34. Be5 Kh7 35. Bd4 axb3 36. Be5 Kh6 37. Bd4 Kh5 38. Be5 Kg6 39. Bd4 Kh7 40. Be5 Kh6 41. Bd4 1/2-1/2
-
-[Event "RL Chess Bot Tournament"]
-[Site "?"]
-[Date "2026.03.06"]
-[Round "5"]
-[White "sample_bot_greedy"]
-[Black "sample_bot_center"]
-[Result "1/2-1/2"]
-[Opening "d4 (1. d2d4)"]
-[Termination "불충분 기물 (무승부)"]
-
-1. d4 e5 2. dxe5 d5 3. Qxd5 Qxd5 4. c3 Qxe5 5. Kd2 Qd4+ 6. cxd4 f5 7. Ke1 Nc6 8. Be3 Nxd4 9. Bxd4 c5 10. Bxg7 Bxg7 11. Na3 Bd4 12. Nf3 Be5 13. Nxe5 c4 14. Nexc4 Nf6 15. b3 Nd5 16. Nd6+ Ke7 17. Nxc8+ Rhxc8 18. e3 Nxe3 19. fxe3 Rc3 20. Nc2 Rxe3+ 21. Nxe3 Kd6 22. Nxf5+ Kd5 23. Bc4+ Ke5 24. Be6 Ke4 25. Ng3+ Ke5 26. Rf1 Kxe6 27. Rf7 Kd5 28. Rxh7 Kd4 29. Rxb7 Kd5 30. Rxa7 Kd4 31. Rxa8 Ke5 32. Nf5 Kd5 33. h3 Ke5 34. a3 Kxf5 35. b4 Ke5 36. Rf8 Kd4 37. Rc8 Kd5 38. Rac1 Ke4 39. R1c5 Kd4 40. Kd1 Ke4 41. R8c6 Kd4 42. h4 Ke4 43. Rh6 Kd4 44. Rh8 Ke4 45. Rb5 Kd4 46. Kd2 Ke4 47. Ke2 Kd4 48. Rd8+ Ke4 49. Rd6 Kf4 50. Kd2 Ke4 51. Rd8 Kf4 52. Rd4+ Kg3 53. Rh5 Kxg2 54. Re4 Kf3 55. Kc1 Kxe4 56. a4 Kd4 57. Rd5+ Kxd5 58. Kd1 Kd4 59. Ke2 Kd5 60. Ke1 Ke4 61. b5 Kd5 62. Kd1 Ke5 63. Kd2 Kd4 64. Ke1 Ke5 65. h5 Kd5 66. a5 Ke5 67. Kd2 Kd5 68. Kc2 Ke5 69. Kb2 Kd5 70. a6 Kd4 71. h6 Kd5 72. Kc1 Kd4 73. Kd2 Ke5 74. Kd1 Kd4 75. Ke2 Kd5 76. Ke1 Ke5 77. b6 Kd4 78. Kf2 Ke4 79. b7 Kd5 80. Ke3 Ke5 81. b8=N Kd5 82. Kd3 Ke5 83. h7 Kd5 84. Ke3 Ke5 85. h8=N Kd5 86. Kf3 Kd4 87. Ke2 Ke5 88. Nd7+ Kd4 89. Nb6 Ke4 90. Nf7 Kd4 91. Ng5 Ke5 92. Kf3 Kd4 93. Ne6+ Ke5 94. Kf2 Kxe6 95. Kg3 Ke5 96. Kg4 Kd4 97. Nd7 Kd5 98. Kf5 Kd4 99. Nc5 Kd5 100. Kg6 Ke5 101. Nb7 Ke4 102. a7 Kd5 103. a8=B Kd4 104. Kf5 Kd5 105. Kf4 Kd4 106. Kg5 Kd5 107. Kh6 Ke5 108. Kg7 Kd4 109. Kf8 Kd5 110. Kg8 Ke5 111. Kh8 Ke4 112. Nc5+ Ke5 113. Be4 Kd4 114. Nd3 Kxe4 1/2-1/2
-
-[Event "RL Chess Bot Tournament"]
-[Site "?"]
-[Date "2026.03.06"]
-[Round "6"]
-[White "sample_bot_center"]
-[Black "sample_bot_greedy"]
-[Result "0-1"]
-[Opening "d4 (1. d2d4)"]
-[Termination "체크메이트 (흑 승리)"]
-
-1. d4 a5 2. d5 Nh6 3. Qd4 g5 4. Qe5 Ng8 5. Qd4 Ra6 6. e4 a4 7. Qe5 Rg6 8. Qd4 a3 9. e5 axb2 10. Qe4 bxa1=Q 11. Qd4 Qxd4 12. Bxg5 Rxg5 13. Nc3 Qxc3+ 14. Kd1 Rxe5 15. Bd3 Re1# 0-1`;
-
 // ── Minimal Chess Engine (board state + SAN parser) ──
 const PIECE_UNICODE = {
   K: '\u2654', Q: '\u2655', R: '\u2656', B: '\u2657', N: '\u2658', P: '\u2659',
@@ -227,7 +202,6 @@ class ChessGame {
     const white = this.turn === 'w';
     let from, to, promo = null;
 
-    // Castling
     if (san === 'O-O' || san === 'O-O-O') {
       const row = white ? 7 : 0;
       const king = white ? 'K' : 'k'; const rook = white ? 'R' : 'r';
@@ -246,17 +220,13 @@ class ChessGame {
       return { from, to };
     }
 
-    // Strip check/mate symbols
     let s = san.replace(/[+#!?]/g, '');
-
-    // Promotion
     if (s.includes('=')) {
       const parts = s.split('=');
       s = parts[0];
       promo = white ? parts[1][0] : parts[1][0].toLowerCase();
     }
 
-    // Pawn move
     if (s[0] >= 'a' && s[0] <= 'h') {
       const isCapture = s.includes('x');
       const dest = isCapture ? s.split('x')[1] : s;
@@ -267,42 +237,27 @@ class ChessGame {
       let fr = -1;
 
       if (isCapture) {
-        // En passant or normal capture
-        if (this.get(tr, tc) !== null) {
-          fr = tr + dir;
-        } else if (this.enPassant && this.enPassant[0] === tr && this.enPassant[1] === tc) {
-          fr = tr + dir;
-          this.set(tr + dir, tc, null); // remove captured pawn
-        } else {
-          fr = tr + dir;
-        }
+        if (this.get(tr, tc) !== null) { fr = tr + dir; }
+        else if (this.enPassant && this.enPassant[0] === tr && this.enPassant[1] === tc) {
+          fr = tr + dir; this.set(tr + dir, tc, null);
+        } else { fr = tr + dir; }
       } else {
         if (this.get(tr, tc) === null) {
-          if (this.get(tr + dir, fc) !== null && ((white && this.get(tr + dir, fc) === 'P') || (!white && this.get(tr + dir, fc) === 'p'))) {
-            fr = tr + dir;
-          } else if (this.get(tr + 2 * dir, fc) !== null) {
-            fr = tr + 2 * dir;
-          }
+          if (this.get(tr + dir, fc) !== null && ((white && this.get(tr + dir, fc) === 'P') || (!white && this.get(tr + dir, fc) === 'p'))) { fr = tr + dir; }
+          else if (this.get(tr + 2 * dir, fc) !== null) { fr = tr + 2 * dir; }
         }
       }
 
       from = [fr, fc]; to = [tr, tc];
       this.set(tr, tc, promo || this.get(fr, fc));
       this.set(fr, fc, null);
-
-      // Set en passant
-      if (Math.abs(fr - tr) === 2) {
-        this.enPassant = [Math.floor((fr + tr) / 2), tc];
-      } else {
-        this.enPassant = null;
-      }
-
+      if (Math.abs(fr - tr) === 2) { this.enPassant = [Math.floor((fr + tr) / 2), tc]; }
+      else { this.enPassant = null; }
       this.updateCastling(from, to);
       this.turn = white ? 'b' : 'w';
       return { from, to };
     }
 
-    // Piece move
     const pieceChar = s[0];
     const piece = white ? pieceChar : pieceChar.toLowerCase();
     let rest = s.slice(1);
@@ -332,8 +287,6 @@ class ChessGame {
 
     const tc = rest.charCodeAt(0) - 97;
     const tr = 8 - parseInt(rest[1]);
-
-    // Find the piece
     const candidates = this.findPiece(piece, tr, tc, disambigFile, disambigRank);
     if (candidates.length === 0) {
       console.warn('No candidate for', san, piece, tr, tc);
@@ -397,19 +350,11 @@ class ChessGame {
     }
     return true;
   }
-
-  clone() {
-    const g = new ChessGame();
-    g.board = this.board.map(r => [...r]);
-    g.turn = this.turn;
-    g.castling = { ...this.castling };
-    g.enPassant = this.enPassant ? [...this.enPassant] : null;
-    return g;
-  }
 }
 
 // ── PGN Parser ──
 function parsePGN(pgn) {
+  if (!pgn || !pgn.trim()) return [];
   const games = [];
   const blocks = pgn.trim().split(/\n\n(?=\[)/);
   let i = 0;
@@ -420,7 +365,6 @@ function parsePGN(pgn) {
     let m;
     while ((m = headerRegex.exec(headerBlock)) !== null) headers[m[1]] = m[2];
 
-    // Find moves - could be in the same block after a blank line, or in next block
     let movesText = '';
     const headerEnd = headerBlock.lastIndexOf(']');
     const afterHeaders = headerBlock.slice(headerEnd + 1).trim();
@@ -431,7 +375,6 @@ function parsePGN(pgn) {
       movesText = blocks[i];
     }
 
-    // Parse moves
     const moves = [];
     if (movesText) {
       const cleaned = movesText.replace(/\{[^}]*\}/g, '').replace(/\([^)]*\)/g, '');
@@ -440,31 +383,25 @@ function parsePGN(pgn) {
         if (!t) continue;
         if (t.match(/^\d+\.+$/)) continue;
         if (['1-0','0-1','1/2-1/2','*'].includes(t)) continue;
-        // Remove move number prefix like "1."
         const san = t.replace(/^\d+\./, '');
         if (san) moves.push(san);
       }
     }
 
-    games.push({ headers, moves });
+    if (Object.keys(headers).length > 0) games.push({ headers, moves });
     i++;
   }
   return games;
 }
 
 // ── Globals ──
-const games = parsePGN(PGN_DATA);
+const games = [];
 let currentGame = 0;
 let currentMove = 0;
-let positions = []; // array of { board (snapshot), lastFrom, lastTo }
+let positions = [];
 let playing = false;
 let playTimer = null;
-
-const standings = [
-  { name: 'sample_bot_greedy', score: 3.5, w: 3, d: 1, l: 0 },
-  { name: 'sample_bot_center', score: 2.0, w: 1, d: 2, l: 1 },
-  { name: 'sample_bot_random', score: 0.5, w: 0, d: 1, l: 3 },
-];
+const standings = [];
 const medals = ['&#x1F947;', '&#x1F948;', '&#x1F949;'];
 
 // ── Build positions for a game ──
@@ -481,7 +418,7 @@ function buildPositions(gameIdx) {
 
 // ── Render ──
 function renderBoard() {
-  const pos = positions[currentMove];
+  const pos = positions[currentMove] || { board: new ChessGame().initBoard(), from: null, to: null };
   const boardEl = document.getElementById('board');
   boardEl.innerHTML = '';
   const files = 'abcdefgh';
@@ -502,20 +439,8 @@ function renderBoard() {
         sq.appendChild(span);
       }
 
-      // Labels
-      if (c === 0) {
-        const rl = document.createElement('span');
-        rl.className = 'rank-label';
-        rl.textContent = 8 - r;
-        sq.appendChild(rl);
-      }
-      if (r === 7) {
-        const fl = document.createElement('span');
-        fl.className = 'file-label';
-        fl.textContent = files[c];
-        sq.appendChild(fl);
-      }
-
+      if (c === 0) { const rl = document.createElement('span'); rl.className = 'rank-label'; rl.textContent = 8 - r; sq.appendChild(rl); }
+      if (r === 7) { const fl = document.createElement('span'); fl.className = 'file-label'; fl.textContent = files[c]; sq.appendChild(fl); }
       boardEl.appendChild(sq);
     }
   }
@@ -523,10 +448,10 @@ function renderBoard() {
 
 function renderPlayerBars() {
   const g = games[currentGame];
+  if (!g) return;
   document.getElementById('topName').textContent = g.headers.Black;
   document.getElementById('bottomName').textContent = g.headers.White;
   const result = g.headers.Result;
-
   const topBadge = document.getElementById('topBadge');
   const bottomBadge = document.getElementById('bottomBadge');
 
@@ -550,6 +475,7 @@ function renderPlayerBars() {
 function renderStatus() {
   const g = games[currentGame];
   const el = document.getElementById('status');
+  if (!g) { el.textContent = ''; return; }
   if (currentMove >= positions.length - 1) {
     el.textContent = g.headers.Termination || g.headers.Result;
   } else {
@@ -562,6 +488,7 @@ function renderStatus() {
 function renderMoveList() {
   const g = games[currentGame];
   const el = document.getElementById('moveList');
+  if (!g) { el.innerHTML = ''; return; }
   let html = '';
   for (let i = 0; i < g.moves.length; i++) {
     if (i % 2 === 0) html += `<span class="move-num">${Math.floor(i / 2) + 1}.</span> `;
@@ -570,28 +497,20 @@ function renderMoveList() {
     if (i % 2 === 1) html += '<br>';
   }
   el.innerHTML = html;
-
-  // Scroll to current
   const cur = el.querySelector('.move-san.current');
   if (cur) cur.scrollIntoView({ block: 'nearest' });
-
-  // Click handler
   el.querySelectorAll('.move-san').forEach(span => {
-    span.addEventListener('click', () => {
-      stopPlay();
-      currentMove = parseInt(span.dataset.idx);
-      renderAll();
-    });
+    span.addEventListener('click', () => { stopPlay(); currentMove = parseInt(span.dataset.idx); renderAll(); });
   });
 }
 
 function renderStandings() {
   const g = games[currentGame];
-  const activeBots = [g.headers.White, g.headers.Black];
+  const activeBots = g ? [g.headers.White, g.headers.Black] : [];
   let html = '<tr><th></th><th>봇</th><th>점수</th><th>승</th><th>무</th><th>패</th></tr>';
   standings.forEach((s, i) => {
     const cls = activeBots.includes(s.name) ? ' class="active-bot"' : '';
-    html += `<tr${cls}><td><span class="medal">${medals[i]}</span></td><td>${s.name.replace('sample_bot_','')}</td><td>${s.score}</td><td>${s.w}</td><td>${s.d}</td><td>${s.l}</td></tr>`;
+    html += `<tr${cls}><td><span class="medal">${medals[i] || ''}</span></td><td>${s.name}</td><td>${s.score}</td><td>${s.w}</td><td>${s.d}</td><td>${s.l}</td></tr>`;
   });
   document.getElementById('standings').innerHTML = html;
 }
@@ -606,7 +525,7 @@ function renderGameList() {
     btn.innerHTML = `
       <span class="game-players">${g.headers.White} vs ${g.headers.Black}</span>
       <span class="game-result" style="color:${resultColor}">${g.headers.Result}</span>
-      <div class="game-info">Round ${g.headers.Round} | ${g.headers.Opening} | ${g.moves.length}수 | ${g.headers.Termination}</div>
+      <div class="game-info">Round ${g.headers.Round} | ${g.headers.Opening || ''} | ${g.moves.length}수 | ${g.headers.Termination || ''}</div>
     `;
     btn.addEventListener('click', () => loadGame(i));
     el.appendChild(btn);
@@ -631,6 +550,7 @@ function updateButtons() {
 
 // ── Navigation ──
 function loadGame(idx) {
+  if (liveMode) return; // 라이브 중엔 수동 전환 불가
   stopPlay();
   currentGame = idx;
   currentMove = 0;
@@ -640,36 +560,20 @@ function loadGame(idx) {
   renderAll();
 }
 
-function goNext() {
-  if (currentMove < positions.length - 1) { currentMove++; renderAll(); }
-  else stopPlay();
-}
+function goNext() { if (currentMove < positions.length - 1) { currentMove++; renderAll(); } else stopPlay(); }
 function goPrev() { if (currentMove > 0) { currentMove--; renderAll(); } }
 function goStart() { currentMove = 0; renderAll(); }
 function goEnd() { currentMove = positions.length - 1; renderAll(); }
 
-function getSpeed() {
-  const v = parseInt(document.getElementById('speedSlider').value);
-  return 1200 - v * 100; // 1100ms ~ 200ms
-}
+function getSpeed() { return 1200 - parseInt(document.getElementById('speedSlider').value) * 100; }
 
 function startPlay() {
   if (currentMove >= positions.length - 1) currentMove = 0;
-  playing = true;
-  updateButtons();
-  playTimer = setInterval(() => {
-    if (currentMove >= positions.length - 1) { stopPlay(); return; }
-    currentMove++;
-    renderAll();
-  }, getSpeed());
+  playing = true; updateButtons();
+  playTimer = setInterval(() => { if (currentMove >= positions.length - 1) { stopPlay(); return; } currentMove++; renderAll(); }, getSpeed());
 }
 
-function stopPlay() {
-  playing = false;
-  clearInterval(playTimer);
-  updateButtons();
-}
-
+function stopPlay() { playing = false; clearInterval(playTimer); updateButtons(); }
 function togglePlay() { playing ? stopPlay() : startPlay(); }
 
 // ── Events ──
@@ -678,11 +582,8 @@ document.getElementById('btnNext').addEventListener('click', () => { stopPlay();
 document.getElementById('btnPrev').addEventListener('click', () => { stopPlay(); goPrev(); });
 document.getElementById('btnStart').addEventListener('click', () => { stopPlay(); goStart(); });
 document.getElementById('btnEnd').addEventListener('click', () => { stopPlay(); goEnd(); });
-document.getElementById('speedSlider').addEventListener('input', () => {
-  if (playing) { stopPlay(); startPlay(); }
-});
+document.getElementById('speedSlider').addEventListener('input', () => { if (playing) { stopPlay(); startPlay(); } });
 
-// Keyboard
 document.addEventListener('keydown', e => {
   if (e.key === 'ArrowRight') { stopPlay(); goNext(); }
   else if (e.key === 'ArrowLeft') { stopPlay(); goPrev(); }
@@ -691,8 +592,286 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'End') { stopPlay(); goEnd(); }
 });
 
-// ── Init ──
-loadGame(0);
+// ============================================================
+// MODE: LIVE
+// ============================================================
+let liveMode = false;
+let liveTimer = null;
+let liveLastMoveCount = 0;
+let liveGameNumber = 0;
+
+function enterLiveMode() {
+  liveMode = true;
+  document.getElementById('modeOverlay').style.display = 'none';
+  document.getElementById('mainViewer').style.display = 'flex';
+  document.getElementById('btnStop').style.display = '';
+  document.getElementById('status').innerHTML = '<span class="live-badge"><span class="dot"></span>LIVE</span> 서버 연결 중...';
+
+  games.length = 0;
+  standings.length = 0;
+  currentGame = 0; currentMove = 0;
+  positions = [{ board: new ChessGame().initBoard(), from: null, to: null }];
+  renderBoard(); renderGameList(); renderStandings();
+  document.getElementById('moveList').innerHTML = '';
+  document.getElementById('topName').textContent = '-';
+  document.getElementById('bottomName').textContent = '-';
+  document.getElementById('topBadge').textContent = ''; document.getElementById('topBadge').className = 'badge';
+  document.getElementById('bottomBadge').textContent = ''; document.getElementById('bottomBadge').className = 'badge';
+
+  liveLastMoveCount = 0;
+  liveGameNumber = 0;
+  liveTimer = setInterval(pollLive, 500);
+}
+
+function exitLiveMode() {
+  liveMode = false;
+  clearInterval(liveTimer);
+  document.getElementById('btnStop').style.display = 'none';
+  // 라이브 종료 후 완료된 게임이 있으면 복기 가능
+  if (games.length > 0) {
+    loadGame(0);
+  }
+}
+
+async function stopTournament() {
+  try {
+    const res = await fetch('/stop', { method: 'POST' });
+    const data = await res.json();
+    if (data.stopped) {
+      document.getElementById('status').innerHTML = '<span class="live-badge"><span class="dot" style="background:#e74c3c;animation:none;"></span>LIVE</span> 토너먼트 중단됨';
+      document.getElementById('btnStop').style.display = 'none';
+    }
+  } catch (e) {
+    document.getElementById('status').innerHTML = '<span class="live-badge"><span class="dot" style="background:#e74c3c;animation:none;"></span>LIVE</span> 중단 요청 실패';
+  }
+}
+
+async function pollLive() {
+  try {
+    const res = await fetch('/live_state.json?t=' + Date.now());
+    if (!res.ok) throw new Error('fetch failed');
+    const state = await res.json();
+
+    // 순위 업데이트
+    if (state.standings && state.standings.length > 0) {
+      standings.length = 0;
+      state.standings.forEach(s => standings.push(s));
+      renderStandings();
+    }
+
+    // 완료된 게임을 game list에 추가
+    if (state.completed_games && state.completed_games.length > 0) {
+      const newPgn = state.completed_games.join('\n\n');
+      const parsed = parsePGN(newPgn);
+      while (games.length < parsed.length) games.push(parsed[games.length]);
+      for (let i = 0; i < parsed.length; i++) games[i] = parsed[i];
+      renderGameList();
+    }
+
+    if (state.status === 'waiting') {
+      document.getElementById('status').innerHTML = '<span class="live-badge"><span class="dot"></span>LIVE</span> 대국 대기 중...';
+      return;
+    }
+
+    if (state.status === 'stopped') {
+      document.getElementById('status').innerHTML = '<span class="live-badge"><span class="dot" style="background:#e74c3c;animation:none;"></span>LIVE</span> 토너먼트 중단됨';
+      exitLiveMode();
+      return;
+    }
+
+    if (state.status === 'finished') {
+      document.getElementById('status').innerHTML = '<span class="live-badge"><span class="dot" style="background:#2ecc71;animation:none;"></span>LIVE</span> 토너먼트 종료';
+      exitLiveMode();
+      if (games.length > 0) loadGame(games.length - 1);
+      return;
+    }
+
+    // 새 대국 감지
+    if (state.game_number !== liveGameNumber) {
+      liveGameNumber = state.game_number;
+      liveLastMoveCount = 0;
+    }
+
+    // 수가 추가되었으면 보드 업데이트
+    if (state.moves && state.moves.length > liveLastMoveCount) {
+      const engine = new ChessGame();
+      const snaps = [{ board: engine.board.map(r => [...r]), from: null, to: null }];
+      for (const san of state.moves) {
+        const { from, to } = engine.applyMove(san);
+        snaps.push({ board: engine.board.map(r => [...r]), from, to });
+      }
+      positions = snaps;
+      currentMove = positions.length - 1;
+
+      document.getElementById('topName').textContent = state.black;
+      document.getElementById('bottomName').textContent = state.white;
+
+      const topBadge = document.getElementById('topBadge');
+      const bottomBadge = document.getElementById('bottomBadge');
+      if (state.result) {
+        if (state.result === '1-0') {
+          bottomBadge.textContent = 'WIN'; bottomBadge.className = 'badge win';
+          topBadge.textContent = 'LOSE'; topBadge.className = 'badge lose';
+        } else if (state.result === '0-1') {
+          topBadge.textContent = 'WIN'; topBadge.className = 'badge win';
+          bottomBadge.textContent = 'LOSE'; bottomBadge.className = 'badge lose';
+        } else {
+          topBadge.textContent = 'DRAW'; topBadge.className = 'badge draw';
+          bottomBadge.textContent = 'DRAW'; bottomBadge.className = 'badge draw';
+        }
+      } else {
+        topBadge.textContent = ''; topBadge.className = 'badge';
+        bottomBadge.textContent = ''; bottomBadge.className = 'badge';
+      }
+
+      renderBoard();
+
+      const moveListEl = document.getElementById('moveList');
+      let html = '';
+      for (let i = 0; i < state.moves.length; i++) {
+        if (i % 2 === 0) html += `<span class="move-num">${Math.floor(i / 2) + 1}.</span> `;
+        const cls = (i === state.moves.length - 1) ? 'current' : '';
+        html += `<span class="move-san ${cls}">${state.moves[i]}</span> `;
+        if (i % 2 === 1) html += '<br>';
+      }
+      moveListEl.innerHTML = html;
+      const cur = moveListEl.querySelector('.move-san.current');
+      if (cur) cur.scrollIntoView({ block: 'nearest' });
+
+      const moveNum = Math.floor(state.moves.length / 2) + (state.moves.length % 2);
+      let statusText = '';
+      if (state.result) {
+        statusText = `대국 ${state.game_number} 종료 - ${state.reason}`;
+      } else {
+        const side = state.moves.length % 2 === 0 ? '백 차례' : '흑 차례';
+        statusText = `대국 ${state.game_number}: ${state.white} vs ${state.black} - ${moveNum}수 ${side}`;
+      }
+      document.getElementById('status').innerHTML = `<span class="live-badge"><span class="dot"></span>LIVE</span> ${statusText}`;
+
+      liveLastMoveCount = state.moves.length;
+      updateButtons();
+    }
+  } catch (e) {
+    // 서버 연결 실패 시 무시 (오버레이에서 이미 처리)
+  }
+}
+
+document.getElementById('btnStop').addEventListener('click', stopTournament);
+
+// ============================================================
+// MODE: REPLAY (파일 업로드)
+// ============================================================
+function enterReplayMode() {
+  document.getElementById('fileUploadArea').style.display = 'block';
+}
+
+function loadReplayData(pgnText, jsonText) {
+  // PGN 파싱
+  const parsed = parsePGN(pgnText);
+  games.length = 0;
+  parsed.forEach(g => games.push(g));
+
+  // JSON standings 파싱
+  standings.length = 0;
+  if (jsonText) {
+    try {
+      const data = JSON.parse(jsonText);
+      if (data.standings) {
+        data.standings.forEach(s => standings.push({
+          name: s.name, score: s.score, w: s.wins, d: s.draws, l: s.losses
+        }));
+      }
+    } catch (e) { console.warn('results.json 파싱 실패', e); }
+  }
+
+  document.getElementById('modeOverlay').style.display = 'none';
+  document.getElementById('mainViewer').style.display = 'flex';
+
+  if (games.length > 0) {
+    loadGame(0);
+  } else {
+    renderBoard(); renderStandings(); renderGameList();
+  }
+}
+
+// 파일 업로드 핸들러
+const fileDrop = document.getElementById('fileDrop');
+const fileInput = document.getElementById('fileInput');
+let pendingFiles = {};
+
+fileDrop.addEventListener('click', () => fileInput.click());
+fileDrop.addEventListener('dragover', e => { e.preventDefault(); fileDrop.classList.add('dragover'); });
+fileDrop.addEventListener('dragleave', () => fileDrop.classList.remove('dragover'));
+fileDrop.addEventListener('drop', e => { e.preventDefault(); fileDrop.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+function handleFiles(fileList) {
+  for (const file of fileList) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (file.name.endsWith('.pgn')) pendingFiles.pgn = e.target.result;
+      else if (file.name.endsWith('.json')) pendingFiles.json = e.target.result;
+
+      // PGN만 있어도 로드 가능
+      if (pendingFiles.pgn) {
+        fileDrop.innerHTML = `<b>${Object.keys(pendingFiles).join(', ')}</b> 로드 완료!`;
+        setTimeout(() => loadReplayData(pendingFiles.pgn, pendingFiles.json || null), 500);
+      }
+    };
+    reader.readAsText(file);
+  }
+}
+
+// ============================================================
+// INIT: 자동 모드 감지
+// ============================================================
+async function init() {
+  let serverAvailable = false;
+
+  try {
+    const res = await fetch('/live_state.json?t=' + Date.now());
+    if (res.ok) {
+      const state = await res.json();
+      serverAvailable = true;
+
+      // 서버가 있고 토너먼트가 진행 중이면 자동 라이브 모드
+      if (state.status === 'playing' || state.status === 'waiting') {
+        enterLiveMode();
+        return;
+      }
+
+      // 서버가 있지만 토너먼트가 끝난 경우 → 완료된 게임 로드
+      if (state.status === 'finished' || state.status === 'stopped') {
+        if (state.completed_games && state.completed_games.length > 0) {
+          const parsed = parsePGN(state.completed_games.join('\n\n'));
+          parsed.forEach(g => games.push(g));
+        }
+        if (state.standings) {
+          state.standings.forEach(s => standings.push(s));
+        }
+        document.getElementById('modeOverlay').style.display = 'none';
+        document.getElementById('mainViewer').style.display = 'flex';
+        if (games.length > 0) loadGame(0);
+        else { renderBoard(); renderStandings(); renderGameList(); }
+        return;
+      }
+    }
+  } catch (e) { /* 서버 없음 */ }
+
+  // 서버 없음 → 모드 선택 오버레이 표시
+  document.getElementById('modeOverlay').style.display = 'flex';
+  document.getElementById('mainViewer').style.display = 'none';
+
+  if (!serverAvailable) {
+    document.getElementById('btnModeLive').disabled = true;
+    document.getElementById('modeDesc').textContent = '서버 미연결 - 복기 모드만 사용 가능합니다';
+  }
+}
+
+document.getElementById('btnModeLive').addEventListener('click', enterLiveMode);
+document.getElementById('btnModeReplay').addEventListener('click', enterReplayMode);
+
+init();
 </script>
 </body>
 </html>

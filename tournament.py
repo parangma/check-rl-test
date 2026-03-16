@@ -179,6 +179,8 @@ def play_game(
     time_per_move: float,
     max_moves: int,
     game_number: int,
+    on_move=None,
+    stop_check=None,
 ) -> dict:
     """
     두 엔진 간 한 판의 대국을 진행합니다.
@@ -211,6 +213,16 @@ def play_game(
     node = game.add_variation(opening_move)
 
     while not board.is_game_over(claim_draw=True):
+        # 중단 체크
+        if stop_check and stop_check():
+            result = "1/2-1/2"
+            reason = "토너먼트 중단 (무승부 처리)"
+            print(f"\n    ⏹ {reason}")
+            game.headers["Result"] = result
+            game.headers["Termination"] = reason
+            return _make_result(result, reason, game, board, white_engine, black_engine,
+                                opening_name, white_total_time, black_total_time)
+
         # 최대 수 제한 체크
         if board.fullmove_number > max_moves:
             result = "1/2-1/2"
@@ -248,6 +260,11 @@ def play_game(
         san = board.san(move)
         board.push(move)
         node = node.add_variation(move)
+
+        # 라이브 콜백
+        if on_move:
+            on_move(board, san, white_engine.name, black_engine.name,
+                    game_number, opening_name)
 
         # 진행 표시 (간단하게)
         if is_white_turn:
@@ -310,13 +327,18 @@ def _make_result(result, reason, game, board, white_engine, black_engine,
 class Tournament:
     """라운드 로빈 토너먼트 매니저"""
 
-    def __init__(self, bot_paths: list, time_per_move: float, max_moves: int):
+    def __init__(self, bot_paths: list, time_per_move: float, max_moves: int,
+                 games_per_match: int = 2, on_move=None, on_game_end=None):
         self.engines = []
         for path in bot_paths:
             name = Path(path).parent.name or Path(path).stem
             self.engines.append(UCIEngine(path, name))
         self.time_per_move = time_per_move
         self.max_moves = max_moves
+        self.games_per_match = games_per_match
+        self.on_move = on_move
+        self.on_game_end = on_game_end
+        self.stopped = False
         self.results = []
         self.scores = {e.name: 0.0 for e in self.engines}
         self.wins = {e.name: 0 for e in self.engines}
@@ -331,7 +353,9 @@ class Tournament:
         print(f"  참가 봇: {', '.join(e.name for e in self.engines)}")
         print(f"  수당 시간: {self.time_per_move}초")
         print(f"  최대 수: {self.max_moves}")
-        print(f"  대국 수: {len(list(combinations(self.engines, 2))) * 2}판")
+        total_games = len(list(combinations(self.engines, 2))) * self.games_per_match
+        print(f"  매치당 대국: {self.games_per_match}판")
+        print(f"  총 대국 수: {total_games}판")
         print("=" * 60)
 
         # 엔진 초기화
@@ -350,6 +374,9 @@ class Tournament:
         matchups = list(combinations(self.engines, 2))
 
         for i, (engine_a, engine_b) in enumerate(matchups):
+            if self.stopped:
+                print("\n  ⏹ 토너먼트가 중단되었습니다.")
+                break
             round_num += 1
             print(f"\n{'─' * 60}")
             print(f"  라운드 {round_num}: {engine_a.name} vs {engine_b.name}")
@@ -359,32 +386,31 @@ class Tournament:
             opening_name = random.choice(list(OPENING_FIRST_MOVES.keys()))
             opening_move = OPENING_FIRST_MOVES[opening_name]
 
-            # 대국 1: A(백) vs B(흑)
-            game_num = i * 2 + 1
-            print(f"\n  📋 대국 {game_num}: {engine_a.name}(백) vs {engine_b.name}(흑)")
-            engine_a.new_game()
-            engine_b.new_game()
-            result1 = play_game(
-                engine_a, engine_b, opening_move, opening_name,
-                self.time_per_move, self.max_moves, game_num
-            )
-            self.results.append(result1)
-            self._update_scores(result1)
-
-            # 대국 2: B(백) vs A(흑) — 같은 오프닝, 색상 교체
-            game_num = i * 2 + 2
-            print(f"\n  📋 대국 {game_num}: {engine_b.name}(백) vs {engine_a.name}(흑)")
-            engine_a.new_game()
-            engine_b.new_game()
-            result2 = play_game(
-                engine_b, engine_a, opening_move, opening_name,
-                self.time_per_move, self.max_moves, game_num
-            )
-            self.results.append(result2)
-            self._update_scores(result2)
+            # 매치당 games_per_match 판 진행
+            pairings = [(engine_a, engine_b), (engine_b, engine_a)]
+            for g in range(self.games_per_match):
+                if self.stopped:
+                    break
+                white, black = pairings[g % 2]
+                game_num = i * self.games_per_match + g + 1
+                print(f"\n  📋 대국 {game_num}: {white.name}(백) vs {black.name}(흑)")
+                engine_a.new_game()
+                engine_b.new_game()
+                result = play_game(
+                    white, black, opening_move, opening_name,
+                    self.time_per_move, self.max_moves, game_num,
+                    on_move=self.on_move,
+                    stop_check=lambda: self.stopped,
+                )
+                self.results.append(result)
+                self._update_scores(result)
+                if self.on_game_end:
+                    self.on_game_end(result, self.scores, self.wins,
+                                    self.draws, self.losses)
 
             # 라운드 중간 스코어
-            self._print_interim_scores()
+            if not self.stopped:
+                self._print_interim_scores()
 
         # 최종 결과
         self._print_final_results()
@@ -527,6 +553,8 @@ def main():
                         help=f"수당 제한 시간 (초, 기본값: {DEFAULT_TIME_PER_MOVE})")
     parser.add_argument("--max-moves", type=int, default=DEFAULT_MAX_MOVES,
                         help=f"최대 수 제한 (기본값: {DEFAULT_MAX_MOVES})")
+    parser.add_argument("--games-per-match", type=int, default=2,
+                        help="매치당 대국 수 (기본값: 2)")
 
     args = parser.parse_args()
 
@@ -538,7 +566,7 @@ def main():
         if not os.path.isfile(bot_path):
             parser.error(f"봇 파일을 찾을 수 없습니다: {bot_path}")
 
-    tournament = Tournament(args.bots, args.time_per_move, args.max_moves)
+    tournament = Tournament(args.bots, args.time_per_move, args.max_moves, args.games_per_match)
     tournament.run()
 
 
